@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+<meta charset="UTF-8">
+<title>PEPE CANDLE</title>
+
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style>
+
+body{
+background:linear-gradient(180deg,#081624,#0c1f33);
+font-family:Arial;
+color:white;
+margin:0;
+text-align:center;
+}
+
+.container{
+max-width:700px;
+margin:auto;
+padding:15px;
+}
+
+h1{
+color:#ffd54a;
+margin-bottom:5px;
+}
+
+#score{
+color:#ffd54a;
+margin-bottom:10px;
+}
+
+.intervals button{
+background:#1c2d3d;
+color:white;
+}
+
+button{
+padding:14px 20px;
+margin:6px;
+cursor:pointer;
+border:none;
+border-radius:10px;
+font-weight:bold;
+font-size:16px;
+}
+
+.up{
+background:#2ecc71;
+box-shadow:0 0 15px rgba(46,204,113,0.5);
+}
+
+.down{
+background:#e74c3c;
+box-shadow:0 0 15px rgba(231,76,60,0.5);
+}
+
+.bigButtons{
+display:flex;
+gap:10px;
+justify-content:center;
+margin-top:10px;
+}
+
+.bigButtons button{
+flex:1;
+font-size:20px;
+padding:18px;
+}
+
+#chart{
+width:100%;
+height:340px;
+background:#0f2233;
+border-radius:12px;
+margin-top:10px;
+}
+
+#stats{
+display:flex;
+justify-content:space-between;
+margin-top:6px;
+font-weight:bold;
+}
+
+#stats span:first-child{color:#2ecc71}
+#stats span:last-child{color:#e74c3c}
+
+.power{
+margin-top:10px;
+}
+
+.power button{
+background:#e0e0e0;
+color:black;
+}
+
+.roundPanel{
+display:flex;
+justify-content:space-around;
+margin-top:15px;
+}
+
+.roundBox{
+background:#13293d;
+padding:10px;
+border-radius:10px;
+min-width:90px;
+}
+
+input{
+width:100%;
+padding:10px;
+margin-top:6px;
+border-radius:6px;
+border:none;
+}
+
+.side{
+background:#0f2233;
+margin-top:20px;
+padding:15px;
+border-radius:10px;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>🐸 PEPE CANDLE</h1>
+<h3>PEPE / USDT</h3>
+
+<div id="score">Twoje punkty: 0</div>
+
+<div class="intervals">
+<button onclick="changeInterval('1m')">1m</button>
+<button onclick="changeInterval('3m')">3m</button>
+<button onclick="changeInterval('5m')">5m</button>
+<button onclick="changeInterval('15m')">15m</button>
+</div>
+
+<div>Następna świeca za: <span id="timer">--</span></div>
+
+<div id="chart"></div>
+
+<div id="stats">
+<span id="upPercent">GÓRA 50%</span>
+<span id="downPercent">DÓŁ 50%</span>
+</div>
+
+<div class="bigButtons">
+
+<button class="up" onclick="choose('up')">
+⬆ GÓRA
+</button>
+
+<button class="down" onclick="choose('down')">
+⬇ DÓŁ
+</button>
+
+</div>
+
+<div class="power">
+
+<h3>SIŁA</h3>
+
+<button onclick="choosePower(1)">1</button>
+<button onclick="choosePower(2)">2</button>
+<button onclick="choosePower(3)">3</button>
+<button onclick="choosePower(5)">5</button>
+
+</div>
+
+<div class="roundPanel">
+
+<div class="roundBox">
+Twój wybór
+<div id="playerChoice"></div>
+</div>
+
+<div class="roundBox">
+Siła
+<div id="powerChoice"></div>
+</div>
+
+<div class="roundBox">
+Wynik
+<div id="result"></div>
+</div>
+
+</div>
+
+<div class="side">
+
+<h3>KONTO</h3>
+
+<input id="email" placeholder="email">
+<input id="password" type="password" placeholder="hasło">
+
+<button onclick="login()">Zaloguj</button>
+<button onclick="register()">Rejestracja</button>
+
+<hr>
+
+<h3>🏆 RANKING</h3>
+
+<div id="ranking"></div>
+
+</div>
+
+</div>
+
+<script>
+
+const SUPABASE_URL="https://sagykqivkzxwmmxftyjd.supabase.co"
+const SUPABASE_KEY="sb_publishable_L0aHHzj_902jj_DUtN4m3w_UmfgZuPu"
+
+const supabaseClient=supabase.createClient(SUPABASE_URL,SUPABASE_KEY)
+
+let chart
+let series
+let interval="1m"
+
+let playerPick=null
+let playerPower=null
+let score=0
+
+let userEmail=null
+let lastCandle=null
+
+function initChart(){
+
+const el=document.getElementById("chart")
+
+chart=LightweightCharts.createChart(el,{
+width:el.offsetWidth,
+height:340,
+layout:{
+background:{color:"#0f2233"},
+textColor:"#DDD"
+},
+grid:{
+vertLines:{color:"rgba(255,255,255,0.05)"},
+horzLines:{color:"rgba(255,255,255,0.05)"}
+}
+})
+
+series=chart.addCandlestickSeries()
+
+window.addEventListener("resize",()=>{
+chart.resize(el.offsetWidth,340)
+})
+
+}
+
+window.onload=()=>{
+
+initChart()
+loadChart()
+loadRanking()
+
+setInterval(loadCandles,3000)
+setInterval(updateTimer,1000)
+
+}
+
+function changeInterval(i){
+interval=i
+loadChart()
+}
+
+async function loadChart(){
+
+const r=await fetch(`https://api.binance.com/api/v3/klines?symbol=PEPEUSDT&interval=${interval}&limit=100`)
+const d=await r.json()
+
+const candles=d.map(c=>({
+time:c[0]/1000,
+open:+c[1],
+high:+c[2],
+low:+c[3],
+close:+c[4]
+}))
+
+series.setData(candles)
+
+}
+
+async function loadCandles(){
+
+const r=await fetch(`https://api.binance.com/api/v3/klines?symbol=PEPEUSDT&interval=${interval}&limit=2`)
+const d=await r.json()
+
+const prev=d[0]
+
+const open=+prev[1]
+const close=+prev[4]
+const time=prev[0]
+
+if(lastCandle && time!=lastCandle){
+
+const dir=close>open?"up":"down"
+
+if(playerPick){
+
+if(dir==playerPick){
+
+document.getElementById("result").innerText="🎉 WYGRANA"
+
+score+=playerPower
+document.getElementById("score").innerText="Twoje punkty: "+score
+
+if(userEmail){
+saveScore()
+}
+
+}else{
+
+document.getElementById("result").innerText="❌ PRZEGRANA"
+
+}
+
+resetRound()
+
+}
+
+}
+
+lastCandle=time
+
+updateStats()
+
+}
+
+function updateStats(){
+
+let up=Math.floor(Math.random()*100)
+let down=100-up
+
+document.getElementById("upPercent").innerText="GÓRA "+up+"%"
+document.getElementById("downPercent").innerText="DÓŁ "+down+"%"
+
+}
+
+function choose(d){
+
+playerPick=d
+
+document.getElementById("playerChoice").innerText=d.toUpperCase()
+
+}
+
+function choosePower(p){
+
+playerPower=p
+document.getElementById("powerChoice").innerText=p
+
+}
+
+function resetRound(){
+
+playerPick=null
+playerPower=null
+
+document.getElementById("playerChoice").innerText=""
+document.getElementById("powerChoice").innerText=""
+
+}
+
+async function register(){
+
+const email=document.getElementById("email").value
+const password=document.getElementById("password").value
+
+await supabaseClient.auth.signUp({email,password})
+
+}
+
+async function login(){
+
+const email=document.getElementById("email").value
+const password=document.getElementById("password").value
+
+await supabaseClient.auth.signInWithPassword({email,password})
+
+userEmail=email
+
+}
+
+async function saveScore(){
+
+await supabaseClient.from("players").upsert({
+Username:userEmail,
+Score:score
+})
+
+loadRanking()
+
+}
+
+async function loadRanking(){
+
+const {data}=await supabaseClient
+.from("players")
+.select("*")
+.order("Score",{ascending:false})
+.limit(10)
+
+let html=""
+
+data.forEach((p,i)=>{
+html+=`${i+1}. ${p.Username} — ${p.Score}<br>`
+})
+
+document.getElementById("ranking").innerHTML=html
+
+}
+
+function updateTimer(){
+const s=60-new Date().getSeconds()
+document.getElementById("timer").innerText=s
+}
+
+</script>
+
+</body>
+</html>
